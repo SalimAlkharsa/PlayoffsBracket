@@ -1,0 +1,118 @@
+#This project aims to create a model that can rank the favorites for this NBA Playoffs.
+#Libraries
+library(e1071) 
+library(tidyverse)
+library(ggplot2)
+library(Hmisc)
+library(ggcorrplot)
+library(pracma)
+library(caret)
+library(leaps)
+library(dplyr)
+library(caret)
+library(MASS)
+library(purrr)
+#Load Data
+df <- read.csv("PlayoffsTrainData.csv", header = TRUE)
+#Remove Team Names To Avoid Bias
+df$Team <- NULL
+#Remove Error In Data
+df$X <- NULL
+df$X.1 <- NULL
+df$X.2 <- NULL
+df$X.3 <- NULL
+#Check everything is in double
+str(df)
+df$Seed <- as.numeric(df$Seed)
+df$Score <- as.numeric(df$Score)
+df$KeyPlayers <- as.numeric(df$KeyPlayers)
+df$PaceInWins <- as.numeric(df$PaceInWins)
+#Divide into 2 DFs for Scaling
+df19 <- df[-c(17:32),]
+df18 <- df[-c(1:16),]
+#Scale Every Single Column
+#First Make Sure Everything is Normally Distributed
+  skewness(df19$X3PPercent) #Mod. Skew
+  skewness(df19$DefRtg)
+  skewness(df19$SecondaryAsts)
+  skewness(df19$PaceInLosses)
+  skewness(df19$PaceInWins)
+  skewness(df19$X3PFGA)
+  skewness(df19$RebPercent)
+  skewness(df19$KeyPlayers)
+  skewness(df19$OffRtg)
+  skewness(df19$MOG)
+  skewness(df19$StarFactor)
+  skewness(df19$Seed)
+  skewness(df18$X3PPercent) #Mod. Skew
+  skewness(df18$DefRtg) 
+  skewness(df18$SecondaryAsts) #Mod. Skew
+  skewness(df18$PaceInLosses)
+  skewness(df18$PaceInWins)
+  skewness(df18$X3PFGA) #Mod. Skew
+  skewness(df18$RebPercent)
+  skewness(df18$KeyPlayers) #Super Skewed
+  skewness(df18$OffRtg)
+  skewness(df18$MOG) #Mod. Skewed
+  skewness(df18$StarFactor)
+  skewness(df18$Seed)
+#I'll need to fix:
+  # df19$X3PPercent
+  # df18$X3PPercent
+  # df18$SecondaryAsts
+  # df18$X3PFGA
+  # df18$KeyPlayers
+#Adjusting 1
+df19$log <- log10(df19$X3PPercent)
+skewness(df19$log)
+df19$sqrt <- sqrt(df19$X3PPercent)
+skewness(df19$sqrt)
+df19$X3PPercent <- log10(df19$X3PPercent) 
+#Adjusting 2
+df18$log <- log10(df18$X3PPercent)
+skewness(df18$log)
+df18$sqrt <- sqrt(df18$X3PPercent)
+skewness(df18$sqrt)
+df18$X3PPercent <- log10(df18$X3PPercent)
+#Delete the extra collumns
+df19$log <- NULL
+df19$sqrt <- NULL
+df18$log <- NULL
+df18$sqrt <- NULL
+#Now everything is standardized to the "best" of my ability, time to scale it
+df19 <- as.data.frame(scale(df19, center = TRUE, scale = TRUE))
+df18 <- as.data.frame(scale(df18, center = TRUE, scale = TRUE))
+#Combine DFs
+df <- rbind(df19, df18)
+#Making Stats
+df$PaceStability <- (3+df$PaceInWins)-(3+df$PaceInLosses) #Positive Means a Team Wins when they play fast
+#To Make A Shooting Rating, To See Percent and Attempts Oppurtunity Cost
+df$ShootingRating <- ((1.5*3+df$X3PFGA)+(3+df$X3PPercent)-7.5)
+#Sniff out Collinearity
+corr <- round(cor(df), 1)
+head(corr[])
+ggcorrplot(corr)
+#PCA
+pca <- prcomp(df,  center = FALSE, scale = FALSE)
+summary(pca)
+plot(pca)
+#I now know that I only need 5 variables
+train_control <- trainControl(method="cv", number=10)
+model <- train(Score~ Seed+StarFactor+ShootingRating+OffRtg,
+                 data=df, trControl=train_control, method="lm")
+summary(model)
+
+
+#Apply the Model
+dfd <- read.csv("Current.csv", header = TRUE)
+#Remove Team Names To Avoid Bias
+dfd$Team <- NULL
+#Make Numeric
+dfd$Seed <- as.numeric(dfd$Seed)
+dfd$X3PPercent <- log10(dfd$X3PPercent)
+dfd <- as.data.frame(scale(dfd, center = TRUE, scale = TRUE))
+dfd$PaceStability <- (3+dfd$PaceInWins)-(3+dfd$PaceInLosses) #Positive Means a Team Wins when they play fast
+#To Make A Shooting Rating, To See Percent and Attempts Oppurtunity Cost
+dfd$ShootingRating <- ((1.5*3+dfd$X3PFGA)+(3+dfd$X3PPercent)-7.5)
+Pred.dfd <- predict(model, dfd, interval="confidence")
+dfd$Score <- Pred.dfd
