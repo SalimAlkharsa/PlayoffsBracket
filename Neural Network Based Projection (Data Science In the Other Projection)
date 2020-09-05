@@ -41,3 +41,5 @@ df.final <- read.csv("Current.csv", header = TRUE)
 df.final$Score <- df2$Score*8.294+7.906
 view(df.final)
 #write.csv("FinalPred.csv")
+
+#This is not complete, as I want to run a sample of 50 simulations to create the final rankings
